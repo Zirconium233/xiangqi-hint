@@ -1,0 +1,11 @@
+# Normalize line endings: LF in the index, LF in the working tree.
+* text=auto eol=lf
+
+# Binary files must not be touched by line-ending conversion.
+*.png binary
+*.jpg binary
+*.gif binary
+*.pt binary
+*.nnue binary
+*.exe binary
+*.dll binary
