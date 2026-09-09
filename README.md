@@ -38,7 +38,7 @@ python -m venv .venv
 从 [Pikafish 官方 Releases](https://github.com/official-pikafish/Pikafish/releases) 下载适合你的 Windows CPU 指令集的版本，以及该版本配套的 NNUE 文件。将它们放在项目根目录：
 
 ```text
-xiangqi-bot/
+xiangqi-hint/
 ├── win_hint_gui.py
 ├── pikafish.exe
 ├── pikafish.nnue
