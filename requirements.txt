@@ -1,0 +1,10 @@
+# Qt desktop GUI
+PyQt5
+# Image processing / array operations
+opencv-python
+numpy
+# CNN inference; torchvision also provides the model transforms
+torch
+torchvision
+# Non-activating Windows screen capture
+mss
