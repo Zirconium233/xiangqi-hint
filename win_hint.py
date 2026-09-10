@@ -2,7 +2,7 @@
 Windows 天天象棋 (微信客户端) 视觉提示 bot。
 
 路线: 窗口截图 (mss) -> CNN 读盘 -> 稳定/合法局面确认 -> Pikafish 主变化
-      -> 点击穿透悬浮窗画箭头 (我方=金色, 对方=红色)
+      -> 点击穿透悬浮窗画箭头 (当前最佳走法=黄色, 随后应对=红色)
 
 用法:
   python win_hint.py --list-windows   # 诊断: 列出所有窗口
@@ -1162,9 +1162,9 @@ class WinHintBot(Bot):
 
         primary = pv[0] if pv else None
         response = pv[1] if len(pv) > 1 else None
-        if turn == self._side_tokens()[0]:
-            return primary, response, info
-        return response, primary, info
+        # Colors encode PV order, not ownership: yellow is the side to move,
+        # red is the reply (including when the opponent moves first).
+        return primary, response, info
 
     # ---------------- hint loop ----------------
 
@@ -1179,9 +1179,7 @@ class WinHintBot(Bot):
     def render_arrows(self, gold_hint, red_hint, ox, oy, w, h):
         """Draw the current principal variation on a transparent canvas.
 
-        Gold is always the user's recommended move. Red is the opponent's
-        best move. On the opponent's turn the red arrow is therefore the
-        engine's first move and the gold arrow is the user's response.
+        Gold is the current side's best move; red is the other side's reply.
         """
         canvas = np.zeros((h, w, 4), np.uint8)
         cw = min(self.cell_w, self.cell_h)

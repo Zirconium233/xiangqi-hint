@@ -651,8 +651,10 @@ class DebugPanel(QMainWindow):
             self._task_failed(f"悬浮层创建失败：{exc}")
             return
         self._set_preview(result['path'])
-        text = (f"金色（我方推荐）：{result['gold']}\n"
-                f"红色（对手/应对）：{result['red']}\n"
+        first = '我方' if self.bot._gui_last_turn == 'b' else '对手'
+        reply = '对手' if self.bot._gui_last_turn == 'b' else '我方'
+        text = (f"黄线（{first}当前最佳走法）：{result['gold']}\n"
+                f"红线（{reply}随后应对）：{result['red']}\n"
                 f"评估：{result['score']}；耗时：{result['elapsed']:.0f}ms")
         self.hint_value.setPlainText(text)
         self.status_value.setText(

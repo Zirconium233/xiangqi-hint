@@ -3,6 +3,71 @@ import cv2
 import numpy as np
 
 
+def _edge_axis(profile, count):
+    """Fit all grid lines jointly, allowing border lines at crop edges."""
+    length = len(profile)
+    profile = np.maximum.reduce([profile, np.roll(profile, 1), np.roll(profile, -1)])
+    starts = np.arange(0, max(2, int(length*.15)))[:, None]
+    best = None
+    for span in np.arange(length*.78, length, .5):
+        positions = starts + np.arange(count)[None, :] * span/(count-1)
+        valid = positions[:, -1] < length
+        positions = positions[valid]
+        if not len(positions):
+            continue
+        values = profile[np.rint(positions).astype(int).clip(0, length-1)]
+        mids = (positions[:, 1:] + positions[:, :-1])*.5
+        between = profile[np.rint(mids).astype(int).clip(0, length-1)]
+        hits = (values > .12).sum(axis=1)
+        scores = np.minimum(values, .7).mean(axis=1) - .65*between.mean(axis=1)
+        scores[hits < count-2] = -1
+        i = int(scores.argmax())
+        if best is None or scores[i] > best[0]:
+            best = float(scores[i]), positions[i].tolist()
+    return best if best and best[0] > .16 else None
+
+
+def detect_edge_grid(img):
+    """Find board frames without relying on wood color or occupied ranks.
+
+    Rectangle edges propose crops; jointly fitted 9/10-line combs verify
+    them. Requiring evidence on both axes rejects UI panels and avatars.
+    """
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 25, 80)
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    boxes = []
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        if (w < 180 or h < 200 or not .78 < w/h < 1.02 or
+                w*h < img.shape[0]*img.shape[1]*.08):
+            continue
+        perimeter = cv2.arcLength(contour, True)
+        polygon = cv2.approxPolyDP(contour, .015*perimeter, True)
+        if len(polygon) != 4 or abs(cv2.contourArea(contour))/(w*h) < .85:
+            continue
+        if any(abs(x-a)+abs(y-b)+abs(w-c)+abs(h-d) < 12 for a,b,c,d in boxes):
+            continue
+        boxes.append((x,y,w,h))
+    best = None
+    for x,y,w,h in sorted(boxes, key=lambda b:b[2]*b[3], reverse=True)[:12]:
+        crop = gray[y:y+h, x:x+w]
+        dark = cv2.morphologyEx(crop, cv2.MORPH_BLACKHAT, np.ones((9,9),np.uint8))
+        ink = (dark > 7).astype(np.uint8)
+        v = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((max(15,h//12),1),np.uint8))
+        z = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1,max(15,w//12)),np.uint8))
+        cols, rows = _edge_axis(v.mean(axis=0),9), _edge_axis(z.mean(axis=1),10)
+        if cols is None or rows is None:
+            continue
+        dx,dy = (cols[1][-1]-cols[1][0])/8, (rows[1][-1]-rows[1][0])/9
+        if not .97 < dx/dy < 1.03:
+            continue
+        score = cols[0]+rows[0]
+        if best is None or score > best[0]:
+            best = score, [a+x for a in cols[1]], [b+y for b in rows[1]]
+    return (best[1],best[2]) if best else None
+
+
 def refine_grid_centers(img, cols, rows):
     """Refine a line fit with nearby piece circles, independent of layout.
 
@@ -174,6 +239,10 @@ def detect_grid(img, _allow_hough=True):
     Detect wood candidates, then require regularly spaced long lines on both
     axes. Menus containing wood and piece icons alone are not sufficient.
     """
+    if _allow_hough:
+        edge_fit = detect_edge_grid(img)
+        if edge_fit is not None:
+            return edge_fit
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     wood = cv2.inRange(hsv, (8, 25, 145), (35, 190, 255))
     wood = cv2.morphologyEx(wood, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8))

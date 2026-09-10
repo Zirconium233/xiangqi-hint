@@ -69,6 +69,34 @@ class AutomaticGuiTests(unittest.TestCase):
         # three separate one-point contours to fillPoly.
         self.assertGreater(int(canvas[100, 170, 3]), 0)
 
+    def test_opponent_turn_yellow_is_first_move(self):
+        bot = WinHintBot(0, 'offline', (0, 0, 900, 1000), use_overlay=False)
+        board = [[None]*9 for _ in range(10)]
+        board[0][1], board[9][1] = 'n', 'N'
+        with patch.object(bot, '_analyse_screen', return_value=(
+                'b0c2', 'info', ['b0c2', 'b9c7'])):
+            self.assertEqual(bot._hint_for_position(board, 'unused', 'w')[:2],
+                             ('b0c2', 'b9c7'))
+
+    def test_grid_detection_with_missing_pieces_and_joined_wood(self):
+        import cv2
+        import numpy as np
+        from board_geometry import detect_edge_grid
+        # The background has the same color as the board: color-component
+        # segmentation cannot separate it. Only geometry provides evidence.
+        img = np.full((720, 1100, 3), (145, 190, 225), np.uint8)
+        cv2.rectangle(img, (260, 65), (700, 555), (60, 95, 140), 2)
+        for c in range(9):
+            cv2.line(img, (280+c*50, 85), (280+c*50, 535), (65, 105, 155), 2)
+        for r in range(10):
+            cv2.line(img, (280, 85+r*50), (680, 85+r*50), (65, 105, 155), 2)
+        for c, r in [(1, 0), (4, 0), (7, 2), (3, 6), (4, 9)]:
+            cv2.circle(img, (280+c*50, 85+r*50), 20, (120, 175, 215), -1)
+        fit = detect_edge_grid(img)
+        self.assertIsNotNone(fit)
+        np.testing.assert_allclose(fit[0], np.arange(9)*50+280, atol=3)
+        np.testing.assert_allclose(fit[1], np.arange(10)*50+85, atol=3)
+
 
 if __name__ == '__main__':
     unittest.main()
