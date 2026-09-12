@@ -58,6 +58,7 @@ except ImportError as exc:  # pragma: no cover - only used on Windows host
 import cv2
 
 import win32_screen
+from dataset_capture import DatasetCapture
 from board_geometry import detect_grid, refine_grid_centers
 from engine_session import EngineSession
 from gui_pipeline import (annotate_board, destroy_overlay, hide_overlay,
@@ -113,6 +114,8 @@ class DebugPanel(QMainWindow):
         self._pending_command = None
         self._pause_requested = False
         self._last_error = None
+        self._collector = None
+        self._collection_requested = False
         self._screenshot_requested = False
         self._screenshot_active = False
         self._screenshot_resume = False
@@ -149,6 +152,9 @@ class DebugPanel(QMainWindow):
         self.screenshot_button.setCheckable(True)
         self.screenshot_button.toggled.connect(self._screenshot_changed)
         self.clear_button = QPushButton("清空结果")
+        self.collect_button = QPushButton("开始数据采集")
+        self.collect_button.setCheckable(True)
+        self.collect_button.toggled.connect(self._collection_changed)
         self.capture_button.clicked.connect(self.start_capture)
         self.calibrate_button.clicked.connect(self.start_calibration)
         self.recognize_button.clicked.connect(self.start_recognition)
@@ -167,6 +173,7 @@ class DebugPanel(QMainWindow):
         buttons.addWidget(self.visibility_button)
         buttons.addWidget(self.screenshot_button)
         buttons.addWidget(self.clear_button)
+        buttons.addWidget(self.collect_button)
 
         info = QFormLayout()
         info.addRow("目标窗口", self.window_value)
@@ -699,6 +706,11 @@ class DebugPanel(QMainWindow):
         return f"{self.bot.win_title}  ({self.bot.win_w}x{self.bot.win_h})"
 
     def closeEvent(self, event):
+        if self._collector is not None and self._collector.isRunning():
+            self._closing = True
+            self._collector.stop()
+            event.ignore()
+            return
         self._timer.stop()
         self._auto = False
         if self._thread is not None:
@@ -802,6 +814,16 @@ class DebugPanel(QMainWindow):
     def _tick(self):
         if self._closing:
             return
+        if self._collection_requested:
+            if self._thread is None and self._collector is None:
+                if self.bot is not None:
+                    hide_overlay(self.bot)
+                self._collector = DatasetCapture(self)
+                self._collector.progress.connect(self.status_value.setText)
+                self._collector.finished.connect(self._collection_finished)
+                self._collector.start()
+                self._collection_controls(False)
+            return
         if self._screenshot_requested:
             self._prepare_screenshot()
             return
@@ -839,6 +861,45 @@ class DebugPanel(QMainWindow):
             self.start_hint()
         else:
             self._recognize_once()
+
+    def _collection_controls(self, enabled):
+        for button in (self.capture_button, self.calibrate_button, self.recognize_button,
+                       self.hint_button, self.show_overlay_button, self.hide_overlay_button,
+                       self.clear_button, self.visibility_button, self.screenshot_button):
+            button.setEnabled(enabled)
+
+    def _collection_changed(self, enabled):
+        if enabled:
+            if self._screenshot_requested:
+                self.screenshot_button.setChecked(False)
+            self._collection_resume = self._auto
+            self._auto = False
+            self._pending_command = self._next_action = None
+            self._collection_requested = True
+            self.collect_button.setText('停止数据采集')
+            self._collection_controls(False)
+            self.status_value.setText('准备采集：提示将暂停，不需要校准或CNN识别成功。')
+        elif self._collector is not None:
+            self.collect_button.setEnabled(False)
+            self._collector.stop()
+        else:
+            self._collection_finished()
+
+    def _collection_finished(self):
+        if self._collector is not None:
+            self._collector.deleteLater()
+        self._collector = None
+        self._collection_requested = False
+        self.collect_button.blockSignals(True)
+        self.collect_button.setChecked(False)
+        self.collect_button.blockSignals(False)
+        self.collect_button.setText('开始数据采集')
+        self.collect_button.setEnabled(True)
+        self._collection_controls(True)
+        self._auto = getattr(self, '_collection_resume', False)
+        self._accepted = self._candidate = None
+        if self._closing:
+            self.close()
 
 
 def main():

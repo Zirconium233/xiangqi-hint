@@ -16,6 +16,7 @@ tmp/
 temp/
 _local_archive/
 cnn_data/
+datasets/
 calib.json
 *.log
 *.tmp
@@ -25,6 +26,8 @@ calib.json
 *.nnue
 .env
 .env.*
+.dsh/
+.credentials.yaml
 .idea/
 .vscode/
 Thumbs.db
